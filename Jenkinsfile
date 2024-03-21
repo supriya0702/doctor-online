@@ -1,40 +1,24 @@
-@Library("jhc-libs") _
-
-pipeline {
+pipeline{
     agent any
-
-    stages {
-        stage('Maven Build') {
-            steps {
-                sh 'mvn clean package'
-            }
-        }
-        stage("Upload Artifacts"){
+    stages{
+        stage("Code Checkout"){
             steps{
-               script{
-                    def pom = readMavenPom file: 'pom.xml'
-                    def version = pom.version
-                    def repoName = version.endsWith("SNAPSHOT") ? "do-snapshot": "do-release"
-                    nexusArtifactUploader artifacts: [[artifactId: 'doctor-online', classifier: '', file: 'target/doctor-online.war', type: 'war']], 
-                        credentialsId: 'nexus3', 
-                        groupId: 'in.javahome', 
-                        nexusUrl: '172.31.47.53:8081', 
-                        nexusVersion: 'nexus3', 
-                        protocol: 'http', 
-                        repository: repoName, 
-                        version: version
-               }
+                git branch: 'main', credentialsId: 'github', url: 'https://github.com/supriya0702/doctor-online'
             }
         }
-        stage("Tomcat Dev Deploy"){
+        stage("Maven Build"){
+           steps{
+               sh 'mvn package'
+           } 
+        }
+        stage("Dev Deploy"){
             steps{
-                tomcatDeploy("172.31.30.174","ec2-user","tomcat-dev","doctor-online.war")
+                sshagent(['tomcat-dev']) {
+                    sh "scp -o StrictHostKeyChecking=no target/doctor-online.war ec2-user@172.31.4.98:/opt/tomcat9/webapps/"
+                    sh "ssh ec2-user@172.31.4.98 /opt/tomcat9/bin/shutdown.sh"
+                    sh "ssh ec2-user@172.31.4.98 /opt/tomcat9/bin/startup.sh"
+                }
             }
         }
-    }
-    post {
-      success {
-        cleanWs()
-      }
     }
 }
